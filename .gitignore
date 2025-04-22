@@ -1,0 +1,18 @@
+# Build output
+x64/
+Debug/
+Release/
+
+# VS files
+.vs/
+*.vcxproj.user
+
+# Logs
+*.log
+
+# CMake or other temp files (if using)
+CMakeFiles/
+CMakeCache.txt
+
+# Libraries
+libs/
