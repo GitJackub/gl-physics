@@ -19,11 +19,16 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Object.cpp" />
+    <ClCompile Include="PhysicsEngine.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Sphere.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Constants.hpp" />
     <ClInclude Include="includes\Sphere.h" />
+    <ClInclude Include="Object.h" />
+    <ClInclude Include="PhysicsEngine.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>

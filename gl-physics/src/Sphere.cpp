@@ -1,7 +1,5 @@
 #include "Sphere.h"
 
-#define GRAVITY 9.81
-
 Sphere::Sphere(float radius, unsigned int stacks, unsigned int slices, float restitution ,glm::vec3 startPos, glm::vec3 startVel, glm::vec3 startAcc)
     : radius(radius), stacks(stacks), slices(slices), startPos(startPos), startVel(startVel), startAcc(startAcc), currentPosition(startPos), restitution(restitution), velocity(startVel), acceleration(startAcc)
 {
@@ -63,18 +61,18 @@ void Sphere::updatePosition(float deltaTime)
     velocity += acceleration * deltaTime;
     glm::vec3 deltaS = velocity * deltaTime + acceleration * deltaTime * deltaTime * 0.5f;
     currentPosition += deltaS;
-    modelMatrix = glm::translate(glm::mat4(1.0f), currentPosition);
     checkCollision();
+    modelMatrix = glm::translate(glm::mat4(1.0f), currentPosition);
 }
 
-void Sphere::setVelocity(glm::vec3 newVelocity)
+void Sphere::setVelocity(glm::vec3 velocity)
 {
-    velocity = newVelocity;
+    this->velocity = velocity;
 }
 
-void Sphere::setAcceleration(glm::vec3 newAcceleration)
+void Sphere::setAcceleration(glm::vec3 acceleration)
 {
-    acceleration = newAcceleration;
+    this->acceleration = acceleration;
 }
 
 void Sphere::applyGravity()
@@ -84,10 +82,26 @@ void Sphere::applyGravity()
 
 void Sphere::checkCollision()
 {
-    if (currentPosition[1] - radius < 0.0f) {
-        currentPosition[1] = radius;
-        velocity[1] = -restitution * velocity[1];
-        modelMatrix = glm::translate(glm::mat4(1.0f), currentPosition);
+    float a = 0.05f;
+    if (currentPosition[1] - radius <= a * (currentPosition[0] * currentPosition[0] + currentPosition[2] * currentPosition[2]))
+    {
+        currentPosition[1] = a * (currentPosition[0] * currentPosition[0] + currentPosition[2] * currentPosition[2]) + radius;
+        glm::vec3 normal = glm::normalize(glm::vec3(-2 * a * currentPosition[0], 1.0f, -2 * a * currentPosition[2]));
+        velocity = (velocity - 2.0f * glm::dot(velocity, normal) * normal);
+        float verticalVelocity = glm::dot(velocity, normal);
+        if (abs(verticalVelocity) < 0.2f) {
+            velocity *= 0.99f;
+        }
+        else {
+            velocity *= restitution;
+        }
+        glm::vec3 tangential = acceleration - glm::dot(acceleration, normal) * normal;
+        setAcceleration(tangential);
+
+    }
+    else {
+        setAcceleration(glm::vec3(0.0f, -GRAVITY, 0.0f));
+        wasOnGround = false;
     }
 }
 
@@ -140,35 +154,28 @@ std::vector<GLfloat> Sphere::generateSphereVertices(float radius, unsigned int s
         for (unsigned int j = 0; j <= slices; ++j) {
             float sliceAngle = 2 * glm::pi<float>() * float(j) / float(slices);  // od 0 do 2*pi
 
-            // Wspó³rzêdne w przestrzeni 3D
             float x = radius * sin(stackAngle) * cos(sliceAngle);
             float y = radius * sin(stackAngle) * sin(sliceAngle);
             float z = radius * cos(stackAngle);
 
-            // Normalne (normalna to po prostu wspó³rzêdne wierzcho³ka w przestrzeni)
             float nx = x;
             float ny = y;
             float nz = z;
 
-            // Normalizacja normalnych, aby by³y jednostkowe (maj¹ d³ugoœæ 1)
             glm::vec3 normal = glm::normalize(glm::vec3(nx, ny, nz));
 
-            // Kolory (opcjonalne, zmieñ to na dowolny sposób)
             float r = (x + 1.0f) / 2.0f;
             float g = (y + 1.0f) / 2.0f;
             float b = (z + 1.0f) / 2.0f;
 
-            // Dodajemy pozycjê wierzcho³ka i normaln¹
             vertices.push_back(x);
             vertices.push_back(y);
             vertices.push_back(z);
 
-            // Dodajemy normaln¹
             vertices.push_back(normal.x);
             vertices.push_back(normal.y);
             vertices.push_back(normal.z);
 
-            // Dodajemy kolor
             vertices.push_back(r);
             vertices.push_back(g);
             vertices.push_back(b);

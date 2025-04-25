@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <vector>
+#include <random>
 
 #include "Sphere.h"
 
@@ -14,9 +15,12 @@
 
 const GLuint WIDTH = 1920, HEIGHT = 1080;
 
-glm::vec3 cameraPos = glm::vec3(0.0f, 4.0f, 10.0f);
+glm::vec3 cameraPos = glm::vec3(0.0f, 8.0f, 15.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+glm::vec3 lightPos = { 1.0f, 7.0f, 1.0f };
+glm::vec3 lightColor = { 1.0f, 1.0f, 1.0f };
 
 float yaw = -90.0f; // k¹t poziomy
 float pitch = 0.0f;  // k¹t pionowy
@@ -25,6 +29,10 @@ bool firstMouse = true;
 
 float deltaTime = 0.0f; // czas miêdzy klatkami
 float lastFrame = 0.0f;
+
+float bowlSize = 20.f;
+int bowlResolution = 100;
+float bowlA = 0.05f;
 
 void framebuffer_resize_callback(GLFWwindow* window, int fbW, int fbH) {
     glViewport(0, 0, fbW, fbH);
@@ -55,25 +63,21 @@ in vec3 FragPos;
 in vec3 Normal;
 out vec4 FragColor;
 
-uniform vec3 lightPos;  // Pozycja Ÿród³a œwiat³a
-uniform vec3 viewPos;   // Pozycja kamery
-uniform vec3 lightColor; // Kolor œwiat³a
-uniform vec3 objectColor; // Kolor obiektu
+uniform vec3 lightDir;      // Kierunek œwiat³a (np. s³oñca)
+uniform vec3 viewPos;       // Pozycja kamery
+uniform vec3 lightColor;    // Kolor œwiat³a
+uniform vec3 objectColor;   // Kolor obiektu
 
 void main()
 {
-    // Normalizacja wektora normalnego i kierunku do œwiat³a
     vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(lightPos - FragPos);
-    
-    // Obliczanie oœwietlenia rozproszonego (Lambert)
-    float diff = max(dot(norm, lightDir), 0.0);
+    vec3 lightDirection = normalize(-lightDir); // œwiat³o padaj¹ce z danego kierunku
 
-    // Oœwietlenie (ambienta + rozproszone)
-    vec3 ambient = 0.1 * lightColor; // S³abe œwiat³o otoczenia
-    vec3 diffuse = diff * lightColor; // Œwiat³o rozproszone
+    float diff = max(dot(norm, lightDirection), 0.0);
 
-    // Kolor finalny
+    vec3 ambient = 0.1 * lightColor;
+    vec3 diffuse = diff * lightColor;
+
     vec3 result = (ambient + diffuse) * objectColor;
     FragColor = vec4(result, 1.0);
 }
@@ -125,6 +129,50 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     cameraFront = glm::normalize(direction);
 }
 
+void generateBowlMesh(std::vector<float>& vertices, std::vector<unsigned int>& indices, float size, int resolution, float a) {
+    for (int i = 0; i <= resolution; ++i) {
+        for (int j = 0; j <= resolution; ++j) {
+            float x = size * ((float)j / resolution - 0.5f);
+            float z = size * ((float)i / resolution - 0.5f);
+            float y = a * (x * x + z * z); // kszta³t miski
+
+            // pozycja
+            vertices.push_back(x);
+            vertices.push_back(y);
+            vertices.push_back(z);
+
+            // normalna (przybli¿ona)
+            glm::vec3 normal = glm::normalize(glm::vec3(-2 * a * x, 1.0f, -2 * a * z));
+            vertices.push_back(normal.x);
+            vertices.push_back(normal.y);
+            vertices.push_back(normal.z);
+
+            // kolor
+            vertices.push_back(0.6f);
+            vertices.push_back(0.6f);
+            vertices.push_back(1.0f); // lekko niebieski odcieñ
+        }
+    }
+
+    for (int i = 0; i < resolution; ++i) {
+        for (int j = 0; j < resolution; ++j) {
+            int row1 = i * (resolution + 1);
+            int row2 = (i + 1) * (resolution + 1);
+
+            indices.push_back(row1 + j);
+            indices.push_back(row2 + j);
+            indices.push_back(row2 + j + 1);
+
+            indices.push_back(row1 + j);
+            indices.push_back(row2 + j + 1);
+            indices.push_back(row1 + j + 1);
+        }
+    }
+}
+
+float bowlHeightAt(float x, float z) {
+    return bowlA * (x * x + z * z);
+}
 
 int main() {
     if (!glfwInit()) {
@@ -149,33 +197,35 @@ int main() {
     }
 
     // Kula
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dist(-10, 10);
+
+    std::vector<Sphere> spheres;
+
     float radius = 0.1f;
     unsigned int stacks = 50;
     unsigned int slices = 50;
-    glm::vec3 position = { 2, 10, 0 };
     glm::vec3 sphereVelocity = { 0,0,0 };
     glm::vec3 sphereAcceleration = { 0,0,0 };
-    float sphereRestitution = 0.6;
+    float sphereRestitution = 0.75;
 
-    Sphere sphere(radius, stacks, slices, sphereRestitution, position);
-    sphere.setVelocity(sphereVelocity);
+    const int number_of_spheres = 10;
+
+    for (int i = 0; i <= number_of_spheres; i++) {
+        glm::vec3 position = { dist(gen), 10 , dist(gen)};
+        Sphere sphere(radius, stacks, slices, sphereRestitution, position);
+        spheres.push_back(sphere);
+    }
+    
 
     // P³aszczyzna
     GLuint planeVAO, planeVBO, planeEBO;
 
-    float planeVertices[] = {
-        // pozycja              // normalna              // kolor
-       -20.0f, 0.0f, -20.0f,    0.0f, 1.0f, 0.0f,       0.3f, 0.8f, 0.3f,
-        20.0f, 0.0f, -20.0f,    0.0f, 1.0f, 0.0f,       0.3f, 0.8f, 0.3f,
-        20.0f, 0.0f,  20.0f,    0.0f, 1.0f, 0.0f,       0.3f, 0.8f, 0.3f,
-       -20.0f, 0.0f,  20.0f,    0.0f, 1.0f, 0.0f,       0.3f, 0.8f, 0.3f
-    };
+    std::vector<float> bowlVertices;
+    std::vector<unsigned int> bowlIndices;
 
-
-    unsigned int planeIndices[] = {
-        0, 1, 2,
-        2, 3, 0
-    };
+    generateBowlMesh(bowlVertices, bowlIndices, bowlSize, bowlResolution, bowlA);
 
     glGenVertexArrays(1, &planeVAO);
     glGenBuffers(1, &planeVBO);
@@ -184,18 +234,18 @@ int main() {
     glBindVertexArray(planeVAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), planeVertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, bowlVertices.size() * sizeof(float), bowlVertices.data(), GL_STATIC_DRAW);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planeEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(planeIndices), planeIndices, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, bowlIndices.size() * sizeof(unsigned int), bowlIndices.data(), GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(GLfloat), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(GLfloat), (void*)(6 * sizeof(GLfloat)));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
     glBindVertexArray(0);
@@ -219,10 +269,6 @@ int main() {
 
     glm::mat4 model = glm::mat4(1.0f);
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / HEIGHT, 0.1f, 100.0f);
-
-    glm::vec3 lightPos = glm::vec3(10.0f, 20.0f, 2.0f);  // Pozycja Ÿród³a œwiat³a
-    glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f); // Bia³e œwiat³o
-
 
     GLint modelLoc = glGetUniformLocation(shaderProgram, "model");
     GLint viewLoc = glGetUniformLocation(shaderProgram, "view");
@@ -250,29 +296,32 @@ int main() {
         glUseProgram(shaderProgram);
 
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
-        glUniform3fv(glGetUniformLocation(shaderProgram, "lightPos"), 1, glm::value_ptr(lightPos));
+        glm::vec3 lightDirection = glm::normalize(glm::vec3(-0.0f, -1.0f, -0.0f));  // np. œwiat³o z góry z ukosa
+        glUniform3fv(glGetUniformLocation(shaderProgram, "lightDir"), 1, glm::value_ptr(lightDirection));
         glUniform3fv(glGetUniformLocation(shaderProgram, "viewPos"), 1, glm::value_ptr(cameraPos));
         glUniform3fv(glGetUniformLocation(shaderProgram, "lightColor"), 1, glm::value_ptr(lightColor));
 
         // === RYSOWANIE KULI ===
         //glm::mat4 model = glm::mat4(1.0f);
         //model = glm::translate(model, glm::vec3(sin(glfwGetTime()) * 2.0f, 0.0f, 0.0f)); // ruch sinusoidalny
-        sphere.updatePosition(deltaTime);
-
         glUniform3fv(glGetUniformLocation(shaderProgram, "objectColor"), 1, glm::value_ptr(glm::vec3(0.6f, 0.6f, 0.6f)));
+        for (auto& sphere : spheres) {
+            sphere.updatePosition(deltaTime);
+            sphere.display(shaderProgram);
+            sphere.moveToStart(window);
+        }
 
-        sphere.moveToStart(window);
-        sphere.display(shaderProgram);
+        glUniform3fv(glGetUniformLocation(shaderProgram, "objectColor"), 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 1.0f)));
         //sphere.debugInfo();
 
         // === RYSOWANIE P£ASZCZYZNY ===
         glm::mat4 planeModel = glm::mat4(1.0f);
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(planeModel));
-        glm::vec3 planeColor = glm::vec3(0.3f, 0.8f, 0.3f);
+        glm::vec3 planeColor = glm::vec3(0.2, 0.4f, 0.2f);
         glUniform3fv(glGetUniformLocation(shaderProgram, "objectColor"), 1, glm::value_ptr(planeColor));
 
         glBindVertexArray(planeVAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, bowlIndices.size(), GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
     }

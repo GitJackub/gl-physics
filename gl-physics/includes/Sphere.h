@@ -6,6 +6,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <vector>
+#define GRAVITY 9.81
 
 class Sphere
 {
@@ -43,5 +44,6 @@ private:
 	glm::vec3 currentPosition;
 	float restitution;
 	glm::vec3 prevPos;
+	bool wasOnGround;
 };
 
