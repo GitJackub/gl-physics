@@ -1,92 +1,24 @@
 #include "Sphere.h"
 
-Sphere::Sphere(float radius, unsigned int stacks, unsigned int slices, float restitution ,glm::vec3 startPos, glm::vec3 startVel, glm::vec3 startAcc)
-    : radius(radius), stacks(stacks), slices(slices), startPos(startPos), startVel(startVel), startAcc(startAcc), currentPosition(startPos), restitution(restitution), velocity(startVel), acceleration(startAcc)
-{
-    sphereVertices = generateSphereVertices(radius, stacks, slices);
-    sphereIndices = generateSphereIndices(stacks, slices);
-
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &EBO);
-
-    glBindVertexArray(VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sphereVertices.size() * sizeof(GLfloat), &sphereVertices[0], GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sphereIndices.size() * sizeof(GLuint), &sphereIndices[0], GL_STATIC_DRAW);
-
-    GLsizei stride = 9 * sizeof(float);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
-    glBindVertexArray(0);
-
-    modelMatrix = glm::mat4(1.0f);
-    modelMatrix = glm::translate(modelMatrix, currentPosition);
-
-    prevPos = glm::vec3(0, 0, 0);
-    applyGravity();
-}
-
-void Sphere::display(GLuint shaderProgram)
-{
-    GLint modelLoc = glGetUniformLocation(shaderProgram, "model");
-    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelMatrix));
-
-    glBindVertexArray(VAO);
-    glDrawElements(GL_TRIANGLES, sphereIndices.size(), GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
-}
-
-void Sphere::updateModelMatrix(glm::mat4 matrix) {
-    modelMatrix = matrix;
-}
-
-glm::mat4 Sphere::getModelMatrix() const {
-    return modelMatrix;
-}
-
-void Sphere::updatePosition(float deltaTime)
-{
-    velocity += acceleration * deltaTime;
-    glm::vec3 deltaS = velocity * deltaTime + acceleration * deltaTime * deltaTime * 0.5f;
-    currentPosition += deltaS;
-    checkCollision();
-    modelMatrix = glm::translate(glm::mat4(1.0f), currentPosition);
-}
-
-void Sphere::setVelocity(glm::vec3 velocity)
-{
-    this->velocity = velocity;
-}
-
-void Sphere::setAcceleration(glm::vec3 acceleration)
-{
-    this->acceleration = acceleration;
-}
+Sphere::Sphere(float radius, unsigned int stacks, unsigned int slices, float restitution, glm::vec3 position, glm::vec3 velocity, glm::vec3 acceleration)
+    : Object(generateSphereVertices(radius, stacks, slices),
+        generateSphereIndices(stacks, slices),
+        "Sphere", position, velocity, acceleration),
+    radius(radius),
+    restitution(restitution){}
 
 void Sphere::applyGravity()
 {
-    acceleration[1] = -GRAVITY;
+    setAcceleration(glm::vec3{ 0, -GRAVITY, 0 });
 }
 
 void Sphere::checkCollision()
-{
+{   
     float a = 0.05f;
-    if (currentPosition[1] - radius <= a * (currentPosition[0] * currentPosition[0] + currentPosition[2] * currentPosition[2]))
+    if (position[1] - radius <= a * (position[0] * position[0] + position[2] * position[2]))
     {
-        currentPosition[1] = a * (currentPosition[0] * currentPosition[0] + currentPosition[2] * currentPosition[2]) + radius;
-        glm::vec3 normal = glm::normalize(glm::vec3(-2 * a * currentPosition[0], 1.0f, -2 * a * currentPosition[2]));
+        position[1] = a * (position[0] * position[0] + position[2] * position[2]) + radius;
+        glm::vec3 normal = glm::normalize(glm::vec3(-2 * a * position[0], 1.0f, -2 * a * position[2]));
         velocity = (velocity - 2.0f * glm::dot(velocity, normal) * normal);
         float verticalVelocity = glm::dot(velocity, normal);
         if (abs(verticalVelocity) < 0.2f) {
@@ -101,25 +33,6 @@ void Sphere::checkCollision()
     }
     else {
         setAcceleration(glm::vec3(0.0f, -GRAVITY, 0.0f));
-        wasOnGround = false;
-    }
-}
-
-void Sphere::debugInfo()
-{
-    printf("Position: x = %f, y = %f, z = %f\n", currentPosition[0], currentPosition[1], currentPosition[2]);
-    printf("Velocity: x = %f, y = %f, z = %f\n", velocity[0], velocity[1], velocity[2]);
-    printf("Acceleration: x = %f, y = %f, z = %f\n", acceleration[0], acceleration[1], acceleration[2]);
-
-}
-
-void Sphere::moveToStart(GLFWwindow *window)
-{
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
-        currentPosition = startPos;
-        setVelocity(startVel);
-        setAcceleration(startAcc);
-        applyGravity();
     }
 }
 
@@ -132,7 +45,6 @@ std::vector<GLuint> Sphere::generateSphereIndices(unsigned int stacks, unsigned 
             unsigned int first = (i * (slices + 1)) + j;
             unsigned int second = first + slices + 1;
 
-            // Dwa trójk¹ty dla ka¿dej czêœci kuli
             indices.push_back(first);
             indices.push_back(second);
             indices.push_back(first + 1);
@@ -181,6 +93,14 @@ std::vector<GLfloat> Sphere::generateSphereVertices(float radius, unsigned int s
             vertices.push_back(b);
         }
     }
-
     return vertices;
+}
+
+void Sphere::updatePosition(float deltaTime)
+{
+    this->velocity += this->acceleration * deltaTime;
+    glm::vec3 deltaS = this->velocity * deltaTime + this->acceleration * deltaTime * deltaTime * 0.5f;
+    this->position += deltaS;
+    this->checkCollision();
+    this->setObjectMatrix(glm::translate(glm::mat4(1.0f), this->position));
 }
